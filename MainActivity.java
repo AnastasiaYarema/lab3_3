@@ -28,6 +28,7 @@ public class MainActivity extends AppCompatActivity {
         EditText MaxText = findViewById(R.id.maxText);
 
         TextView resultText = findViewById(R.id.resultText);
+        TextView bestPercent = findViewById(R.id.bestPercent);
 
         if (A.getText().toString().trim().equals("")
                 || B.getText().toString().trim().equals("")
@@ -59,34 +60,46 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        Algorithm diofant = new Algorithm(FINAL_VALUE, POPULATION_SIZE, GENE_MIN, GENE_MAX, a, b, c, d);
-        diofant.initiatePopulation(FINAL_VALUE, GENE_MIN, GENE_MAX, a, b, c, d);
         Chromosome chromosome = null;
-        long iterationsNumber = 0;
+        long iterationMin = Integer.MAX_VALUE;
+        float bestPercentValue = 0.0F;
 
-        do {
-            int fitnessFilling = diofant.fillChromosomesWithFitnesses();
+        for (float mutationPercent = 1.0F; mutationPercent < 100.0f; mutationPercent += 0.5F) {
+            Algorithm diofant = new Algorithm(FINAL_VALUE, POPULATION_SIZE, GENE_MIN, GENE_MAX, a, b, c, d);
+            diofant.initiatePopulation(FINAL_VALUE, GENE_MIN, GENE_MAX, a, b, c, d, mutationPercent);
+            long iterationsNumber = 0;
 
-            if (fitnessFilling != -2) {
-                chromosome = diofant.getPopulation()[fitnessFilling];
-                break;
+            do {
+                int fitnessFilling = diofant.fillChromosomesWithFitnesses();
+
+                if (fitnessFilling != -2) {
+                    chromosome = diofant.getPopulation()[fitnessFilling];
+                    break;
+                }
+
+                diofant.fillLikelihoods();
+
+                int[][] pairs = diofant.getPairsForCrossover();
+                diofant.analyzePairs(pairs);
+
+                Chromosome nextGeneration[];
+                nextGeneration = diofant.nextGenerationWithCrossoverAndMutation(pairs);
+
+                diofant.setPopulation(nextGeneration);
+
+                iterationsNumber++;
+            } while (iterationsNumber < 10000);
+
+            if (iterationsNumber < iterationMin) {
+                iterationMin = iterationsNumber;
+                bestPercentValue = mutationPercent;
             }
+        }
 
-            diofant.fillLikelihoods();
-
-            int[][] pairs = diofant.getPairsForCrossover();
-            diofant.analyzePairs(pairs);
-
-            Chromosome nextGeneration[];
-            nextGeneration = diofant.nextGenerationWithCrossoverAndMutation(pairs);
-
-            diofant.setPopulation(nextGeneration);
-
-            iterationsNumber++;
-        } while (iterationsNumber < 10000);
 
         if (chromosome != null) {
             resultText.setText("Результат: " + chromosome);
+            bestPercent.setText("Найкращий відсоток: " + bestPercentValue);
         } else {
             resultText.setText("Рішення не знайдено");
         }
@@ -100,9 +113,9 @@ class Chromosome {
     int targetValue, a, b, c, d;
     public final int TARGET_IS_REACHED_FLAG = -1;
     public int geneMin, geneMax;
-    public final float MUTATION_LIKELIHOOD = 5.0F;
+    public float mutationPercent;
 
-    public Chromosome(int FINAL_VALUE, int GENE_MIN, int GENE_MAX, int a, int b, int c, int d) {
+    public Chromosome(int FINAL_VALUE, int GENE_MIN, int GENE_MAX, int a, int b, int c, int d, float mutationPercent) {
         this.targetValue = FINAL_VALUE;
         this.geneMin = GENE_MIN;
         this.geneMax = GENE_MAX;
@@ -110,6 +123,7 @@ class Chromosome {
         this.b = b;
         this.c = c;
         this.d = d;
+        this.mutationPercent = mutationPercent;
     }
 
     private int genes[] = new int[Algorithm.GENES_SIZE];
@@ -174,8 +188,9 @@ class Chromosome {
         Chromosome result = (Chromosome) this.clone();
 
         for (int i = 0; i < 4; ++i) {
+
             float randomPercent = getRandomFloat(0, 100);
-            if (randomPercent < MUTATION_LIKELIHOOD) {
+            if (randomPercent < mutationPercent) {
                 int newValue = getRandomGene();
                 result.getGenes()[i] = newValue;
             }
@@ -187,8 +202,8 @@ class Chromosome {
 
         int crossoverline = getRandomCrossoverLine();
         Chromosome[] result = new Chromosome[2];
-        result[0] = new Chromosome(targetValue, geneMin, geneMax, a, b, c, d);
-        result[1] = new Chromosome(targetValue, geneMin, geneMax, a, b, c, d);
+        result[0] = new Chromosome(targetValue, geneMin, geneMax, a, b, c, d, mutationPercent);
+        result[1] = new Chromosome(targetValue, geneMin, geneMax, a, b, c, d, mutationPercent);
 
         for (int i = 0; i < 4; ++i) {
             if (i <= crossoverline) {
@@ -226,7 +241,7 @@ class Chromosome {
     }
 
     protected Object clone() {
-        Chromosome resultChromosome = new Chromosome(targetValue, geneMin, geneMax, a, b, c, d);
+        Chromosome resultChromosome = new Chromosome(targetValue, geneMin, geneMax, a, b, c, d, mutationPercent);
         resultChromosome.setFitness(this.getFitness());
         resultChromosome.setLikelihood(this.getLikelihood());
         int resultGenes[];
@@ -314,9 +329,9 @@ class Algorithm {
         }
     }
 
-    public void initiatePopulation(int targetValue, int geneMin, int geneMax, int a, int b, int c, int d) {
+    public void initiatePopulation(int targetValue, int geneMin, int geneMax, int a, int b, int c, int d, float mutationPercent) {
         for (int i = 0; i < POPULATION_SIZE; i++) {
-            population[i] = new Chromosome(targetValue, geneMin, geneMax, a, b, c, d);
+            population[i] = new Chromosome(targetValue, geneMin, geneMax, a, b, c, d, mutationPercent);
             randomizeGenes(population[i]);
         }
     }
